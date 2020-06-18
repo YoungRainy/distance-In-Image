@@ -12,7 +12,7 @@ Really simple, just load the library **lib_gui**, one example is given in *image
 the interface looks like the following：
 
 ![image1](https://user-images.githubusercontent.com/23354170/85054398-45115600-b19c-11ea-9fb9-6c3a4cef90fd.png)
-
+![image2](https://user-images.githubusercontent.com/23354170/85055536-ff558d00-b19d-11ea-8d56-48ea640ceec9.png)
 ## steps
 1. click "Load Path"
 2. click "Load Image"
