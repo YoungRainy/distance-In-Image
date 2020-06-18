@@ -167,6 +167,9 @@ class MyGUI(object):
         self.drawState = DrawState()
         self.history = [] # action hsitory
         self.allDims = [] # all measurements
+        self.tempState = DrawState()
+        self.tempAction = []
+        self.tempDis = 0
         
         self.initGUI()
         
@@ -222,53 +225,65 @@ class MyGUI(object):
             
             
     def __measureDimension(self, x, y):
-        if self.history:
-            s1 = self.history[-1]
-            (index, sta, ac) = s1
-        else:
-            sta = self.drawState
-            
-        if sta.currentState() == 'Start':
+        if self.drawState.currentState() =='Start':
             self.dimPntPair.p1_x = x
             self.dimPntPair.p1_y = y
-            ac = self.canvas.create_oval(x-circle_radius, y-circle_radius, x + circle_radius, y+circle_radius, fill='green')
-            sta.isP1Drawn = True
-            s = sta
+            ac1 = self.canvas.create_oval(x-circle_radius, y-circle_radius, x + circle_radius, y+circle_radius, fill='green')
+            self.drawState.isP1Drawn = True
             
-            self.history.append([self.cur_index+1, s, ac])
-            self.__showStatus('current state, index: {}, P1Drawn'.format(index))
-            return
-        if sta.currentState() == 'P1Drawn':
-            self.dimPntPair.p2_x = x
-            self.dimPntPair.p2_y = y
-            ac = self.canvas.create_oval(x-circle_radius, y-circle_radius, x + circle_radius, y+circle_radius, fill='green')
-            sta.isP2Drawn = True
-            s = sta
-            self.history.append([index, s, ac])
-            self.__showStatus('current state, index: {}, P2Drawn'.format(index))
-            return
-        if sta.currentState() == 'P2Drawn':
-            ac = self.__drawPointCoupleLine(self.dimPntPair)
-            sta.isLineDrawn = True
-            s = sta
-            self.history.append([index, s, ac])
-            dis = self.dimPntPair.distance()
-            dis = dis * self.scale
-            self.dimensions.append(dis)
-            self.list_collected.insert(END, 'dim {}: {}'.format(self.cur_index, dis))
-            self.__showStatus('current state, index: {}, LineDrawn'.format(index))
+            self.tempAction.append(ac1)
+            self.tempState = self.drawState
+            self.__showStatus('current state, index: {}, P1Drawn'.format(len(self.allDims)))
             return
         
-        if sta.currentState() == 'LineDrawn':
+        if self.drawState.currentState() == 'P1Drawn':
+            self.dimPntPair.p2_x = x
+            self.dimPntPair.p2_y = y
+            ac2 = self.canvas.create_oval(x-circle_radius, y-circle_radius, x + circle_radius, y+circle_radius, fill='green')
             
-            ac = self.canvas.create_text(self.dimPntPair.p2_x+10, self.dimPntPair.p2_y+10,fill='red', font=("Purisa", 12), text = str(self.cur_index))
-            sta.isTextDrawn = True
-            s = sta
-            self.history.append([index, s, ac])
+            self.drawState.isP2Drawn = True
             
-            self.__showStatus('current state, index: {}, TextDrawn'.format(index))
-            self.cur_index += 1
+            self.tempAction.append(ac2)
+            self.tempState = self.drawState
+            self.__showStatus('current state, index: {}, P2Drawn'.format(len(self.allDims)))
+            return
+            
+        if self.drawState.currentState() == 'P2Drawn':
+            ac3 = self.__drawPointCoupleLine(self.dimPntPair)
+            self.drawState.isLineDrawn = True
+            
+            dis = self.dimPntPair.distance()
+            dis = dis * self.scale
+            self.tempDis = dis
+            
+            self.list_collected.insert(END, 'dim {}: {}'.format(len(self.allDims), dis))
+            
+            self.tempState = self.drawState
+            self.tempAction.append(ac3)
+            self.__showStatus('current state, index: {}, LineDrawn'.format(len(self.allDims)))
+            return
+        
+        if self.drawState.currentState() == 'LineDrawn':
+            ac4 = self.canvas.create_text(self.dimPntPair.p2_x+10, self.dimPntPair.p2_y+10,fill='red', font=("Purisa", 12), text = str(len(self.allDims)))
+            self.drawState.isTextDrawn = True
+            
+            self.tempAction.append(ac4)
+            
+            
+            self.__showStatus('current state, index: {}, TextDrawn'.format(len(self.allDims)))
+            
+            t = self.tempAction.copy()
+            
+            self.history.append(t)
+            print('history length:{}'.format(len(self.history)))
+            print('history:')
+            print(self.history)
+            self.allDims.append(self.tempDis)
             self.drawState.reset()
+            self.tempAction.clear()
+            print('history2:')
+            print(self.history)
+            
             return
         
             
@@ -345,9 +360,21 @@ class MyGUI(object):
     
     def __undo(self):
         self.label_status.configure(text='Undo last step!')
-        (index, s, ac) = self.history.pop()
         
-        self.canvas.delete(ac)
+        if self.tempAction:
+            for i in range(len(self.tempAction)):
+                self.canvas.delete(self.tempAction[i])
+        else:
+            print(self.history)
+            print('history length: {}'.format(len(self.history)))
+            action = self.history.pop(-1)
+            d = self.allDims.pop(-1)
+            print(len(action))
+            for i in range(len(action)):
+                self.canvas.delete(action[i])
+        self.tempAction.clear()
+        self.drawState.reset()
+            
     
         
     def run(self):
