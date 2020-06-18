@@ -4,7 +4,7 @@ calculate the distance in the image based on the reference length
 '''
 
 from tkinter import *
-from tkinter.filedialog import askopenfilename
+from tkinter.filedialog import askopenfilename, asksaveasfilename
 from PIL import Image, ImageDraw, ImageFont, ImageGrab, ImageTk, PngImagePlugin
 import math
 import numpy as np
@@ -51,6 +51,12 @@ class PointCouple():
     def distance(self):
         dis = math.sqrt((self.p1_x - self.p2_x)**2 + (self.p1_y - self.p2_y)**2)
         return dis
+    
+    def clear(self):
+        self.p1_x = 0
+        self.p1_y = 0
+        self.p2_x = 0
+        self.p2_y = 0
 
 class HandDimension():
     def __init__(self):
@@ -137,6 +143,7 @@ class MyGUI(object):
         self.button_measure = Button(self.frame_tools, text='Start Measuring', width=button_width, command=self.__startMeasure)
         self.button_export_result = Button(self.frame_tools, text='Expert result', width=button_width, command=self.__exportResult)
         self.button_undo = Button(self.frame_tools, text='Undo', width=button_width, command=self.__undo)
+        self.button_reCalibrate = Button(self.frame_tools, text='Recalibrate', width=button_width, command=self.__recalibrate) 
         
         self.label_ref_length = Label(self.frame_tools, text='Set real Length (mm):')
         self.entry_ref_length = Entry(self.frame_tools, width=button_width)
@@ -170,10 +177,11 @@ class MyGUI(object):
         self.tempState = DrawState()
         self.tempAction = []
         self.tempDis = 0
+        self.tempCalibrateAction = []
         
-        self.initGUI()
+        self.__initGUI()
         
-    def initGUI(self):
+    def __initGUI(self):
         self.frame_tools.grid(rowspan=2, column=0, sticky='ns')
         self.frame_canvas.grid(row=0,column=1, sticky='nsew')
         self.frame_buttom.grid(row=1,columnspan=2, sticky='ew')
@@ -186,7 +194,8 @@ class MyGUI(object):
         self.label_ref_length.grid(row=2, column=0, columnspan=2, sticky='ew')
         self.entry_ref_length.grid(row=3, column=0, columnspan=2, sticky='ew')
         self.button_set_ref_length.grid(row=4, column=0, columnspan=2, sticky='ew')
-        self.button_calibrate.grid(row=5, column=0, columnspan=2, sticky='ew')
+        self.button_calibrate.grid(row=5, column=0, columnspan=1, sticky='ew')
+        self.button_reCalibrate.grid(row=5, column=1, columnspan=1, sticky='ew')
         self.button_measure.grid(row=6, column=0, columnspan=2, sticky='ew')
         self.button_export_result.grid(row=7, column=0, columnspan=2, sticky='ew')
         self.button_undo.grid(row=8, column=0, columnspan=2, sticky='ew')
@@ -212,6 +221,13 @@ class MyGUI(object):
     
     def __showStatus(self, data):
         self.label_status.configure(text=data)
+        
+    def __recalibrate(self):
+        self.__showStatus('recalibrae')
+        for i in range(len(self.tempCalibrateAction)):
+            self.canvas.delete(self.tempCalibrateAction[i])   
+        self.calibrationPair.clear()
+        
     
     def __getCoordinate(self, event):
         x = self.canvas.canvasx(event.x)
@@ -275,15 +291,11 @@ class MyGUI(object):
             t = self.tempAction.copy()
             
             self.history.append(t)
-            print('history length:{}'.format(len(self.history)))
-            print('history:')
-            print(self.history)
+            
             self.allDims.append(self.tempDis)
             self.drawState.reset()
             self.tempAction.clear()
-            print('history2:')
-            print(self.history)
-            
+
             return
         
             
@@ -292,13 +304,16 @@ class MyGUI(object):
         if not self.calibrationPair.isP1Full():
             self.calibrationPair.p1_x = x
             self.calibrationPair.p1_y = y
-            self.canvas.create_oval(x-circle_radius, y-circle_radius, x + circle_radius, y+circle_radius, fill='red')
+            a1 = self.canvas.create_oval(x-circle_radius, y-circle_radius, x + circle_radius, y+circle_radius, fill='red')
+            self.tempCalibrateAction.append(a1)
             return
         if not self.calibrationPair.isP2Full():
             self.calibrationPair.p2_x = x
             self.calibrationPair.p2_y = y
-            self.canvas.create_oval(x-circle_radius, y-circle_radius, x + circle_radius, y+circle_radius, fill='red')
-            ac = self.__drawPointCoupleLine(self.calibrationPair)
+            a2 = self.canvas.create_oval(x-circle_radius, y-circle_radius, x + circle_radius, y+circle_radius, fill='red')
+            self.tempCalibrateAction.append(a2)
+            a3 = self.__drawPointCoupleLine(self.calibrationPair)
+            self.tempCalibrateAction.append(a3)
             
             #compute scale
             self.scale = self.real_object_length / self.calibrationPair.distance()
@@ -317,6 +332,7 @@ class MyGUI(object):
         self.image_path = askopenfilename(parent=self.master, title='choose hand image!')
         self.text_path.set(self.image_path)
         self.__showStatus('Load image: {}'.format(self.image_path))
+                
     
     def __loadImage(self):
         image = ImageTk.PhotoImage(Image.open(self.image_path))
@@ -336,7 +352,6 @@ class MyGUI(object):
     
     def __calibrate(self):
         self.label_status.configure(text='Select 2 points of a line that known its real distance.')
-        self.button_calibrate.config(state=DISABLED)
         self.current_state = self.workState.CALIBRATING
     
     def __setReferenceLength(self):
@@ -355,8 +370,12 @@ class MyGUI(object):
     
     def __exportResult(self):
         self.label_status.configure(text='Export the result!')
+        save_name = asksaveasfilename(parent=self.master, title='Save the result as .txt file!',filetypes = (("TXT files","*.txt"),("all files","*.*")))
+        with open(save_name, 'w+') as f:
+            for i in range(len(self.allDims)):
+                f.write('{}\n'.format(self.allDims[i]))
+        self.__showStatus('File saved success.')
         
-        pass
     
     def __undo(self):
         self.label_status.configure(text='Undo last step!')
@@ -365,18 +384,15 @@ class MyGUI(object):
             for i in range(len(self.tempAction)):
                 self.canvas.delete(self.tempAction[i])
         else:
-            print(self.history)
-            print('history length: {}'.format(len(self.history)))
             action = self.history.pop(-1)
             d = self.allDims.pop(-1)
-            print(len(action))
+            
             for i in range(len(action)):
                 self.canvas.delete(action[i])
         self.tempAction.clear()
         self.drawState.reset()
             
     
-        
     def run(self):
         self.master.mainloop()
 
