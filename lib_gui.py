@@ -61,7 +61,10 @@ class HandDimension():
         
 class DrawState():
     # the state when drawn point pairs
+    # 
     def __init__(self):
+        self.state = ['Start','P1Drawn', 'P2Drawn', 'LineDrawn', 'TextDrawn']
+        
         self.isP1Drawn = False
         self.isLineDrawn = False
         self.isP2Drawn = False
@@ -72,11 +75,26 @@ class DrawState():
         self.isLineDrawn = False
         self.isP2Drawn = False
         self.isTextDrawn = False
+                
+    def currentState(self):
+        if self.isP1Drawn == False and self.isP2Drawn == False and self.isLineDrawn == False and self.isTextDrawn == False:
+            return 'Start'
+        elif self.isP1Drawn == True and self.isP2Drawn == False and self.isLineDrawn == False and self.isTextDrawn == False:
+            return 'P1Drawn'
+        elif self.isP1Drawn == True and self.isP2Drawn == True and self.isLineDrawn == False and self.isTextDrawn == False:
+            return 'P2Drawn'
+        elif self.isP1Drawn == True and self.isP2Drawn == True and self.isLineDrawn == True and self.isTextDrawn == False:
+            return 'LineDrawn'
+        elif self.isP1Drawn == True and self.isP2Drawn == True and self.isLineDrawn == True and self.isTextDrawn == True:
+            return 'TextDrawn'
+        
+        
         
     def isDone(self):
         # if the draw is finished, return true
         return self.isP1Drawn and self.isP2Drawn and self.isLineDrawn and self.isTextDrawn
         
+    
 class MyGUI(object):
     def __init__(self, master):
         self.master = master
@@ -144,9 +162,11 @@ class MyGUI(object):
         self.dimensions = []
         self.dimPntPair = PointCouple()
         self.counter = 0 # measurement counter
-        self.dim_index = 0 # the index of measurement, do not include the calibration
+        self.cur_index = 0 # the index of measurement, do not include the calibration
         self.stack = [] # action stack
         self.drawState = DrawState()
+        self.history = [] # action hsitory
+        self.allDims = [] # all measurements
         
         self.initGUI()
         
@@ -202,32 +222,55 @@ class MyGUI(object):
             
             
     def __measureDimension(self, x, y):
-        if self.counter % 2 == 0:
-            # the first click
+        if self.history:
+            s1 = self.history[-1]
+            (index, sta, ac) = s1
+        else:
+            sta = self.drawState
+            
+        if sta.currentState() == 'Start':
             self.dimPntPair.p1_x = x
             self.dimPntPair.p1_y = y
             ac = self.canvas.create_oval(x-circle_radius, y-circle_radius, x + circle_radius, y+circle_radius, fill='green')
-            self.stack.append(ac)
+            sta.isP1Drawn = True
+            s = sta
             
-        elif self.counter % 2 == 1:
+            self.history.append([self.cur_index+1, s, ac])
+            self.__showStatus('current state, index: {}, P1Drawn'.format(index))
+            return
+        if sta.currentState() == 'P1Drawn':
             self.dimPntPair.p2_x = x
             self.dimPntPair.p2_y = y
             ac = self.canvas.create_oval(x-circle_radius, y-circle_radius, x + circle_radius, y+circle_radius, fill='green')
-            self.stack.append(ac)
-            self.__drawPointCoupleLine(self.dimPntPair)
-            
+            sta.isP2Drawn = True
+            s = sta
+            self.history.append([index, s, ac])
+            self.__showStatus('current state, index: {}, P2Drawn'.format(index))
+            return
+        if sta.currentState() == 'P2Drawn':
+            ac = self.__drawPointCoupleLine(self.dimPntPair)
+            sta.isLineDrawn = True
+            s = sta
+            self.history.append([index, s, ac])
             dis = self.dimPntPair.distance()
             dis = dis * self.scale
             self.dimensions.append(dis)
-            index = self.counter // 2
+            self.list_collected.insert(END, 'dim {}: {}'.format(self.cur_index, dis))
+            self.__showStatus('current state, index: {}, LineDrawn'.format(index))
+            return
+        
+        if sta.currentState() == 'LineDrawn':
             
-            ac = self.canvas.create_text(x+10, y+10,fill='red', font=("Purisa", 12), text = str(index))
-            self.stack.append(ac)
+            ac = self.canvas.create_text(self.dimPntPair.p2_x+10, self.dimPntPair.p2_y+10,fill='red', font=("Purisa", 12), text = str(self.cur_index))
+            sta.isTextDrawn = True
+            s = sta
+            self.history.append([index, s, ac])
             
-            self.list_collected.insert(END, 'dim {}: {}'.format(index, dis))
-            
-            self.__showStatus('dimension {}, value: {}'.format(index, dis))
-        self.counter += 1
+            self.__showStatus('current state, index: {}, TextDrawn'.format(index))
+            self.cur_index += 1
+            self.drawState.reset()
+            return
+        
             
             
     def __measureReferenceObject(self, x, y):
@@ -240,7 +283,7 @@ class MyGUI(object):
             self.calibrationPair.p2_x = x
             self.calibrationPair.p2_y = y
             self.canvas.create_oval(x-circle_radius, y-circle_radius, x + circle_radius, y+circle_radius, fill='red')
-            self.__drawPointCoupleLine(self.calibrationPair)
+            ac = self.__drawPointCoupleLine(self.calibrationPair)
             
             #compute scale
             self.scale = self.real_object_length / self.calibrationPair.distance()
@@ -252,8 +295,8 @@ class MyGUI(object):
                 
     def __drawPointCoupleLine(self, pc = PointCouple()):
         # draw the line between the point couple
-        ac = self.canvas.create_line(pc.p1_x, pc.p1_y, pc.p2_x, pc.p2_y)
-        self.stack.append(ac)
+        return self.canvas.create_line(pc.p1_x, pc.p1_y, pc.p2_x, pc.p2_y)
+        
     
     def __loadImagePath(self):
         self.image_path = askopenfilename(parent=self.master, title='choose hand image!')
@@ -302,7 +345,8 @@ class MyGUI(object):
     
     def __undo(self):
         self.label_status.configure(text='Undo last step!')
-        ac = self.stack.pop()
+        (index, s, ac) = self.history.pop()
+        
         self.canvas.delete(ac)
     
         
