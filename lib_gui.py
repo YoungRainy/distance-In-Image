@@ -7,7 +7,6 @@ from tkinter import *
 from tkinter.filedialog import askopenfilename, asksaveasfilename
 from PIL import Image, ImageDraw, ImageFont, ImageGrab, ImageTk, PngImagePlugin
 import math
-import numpy as np
 
 # the size of the GUI
 tool_zone_width = 100
